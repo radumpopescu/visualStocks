@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Daily Returns</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles for the color gradation */
+        .positive-return {
+            background-color: rgba(52, 211, 153, var(--tw-bg-opacity));
+        }
+        .negative-return {
+            background-color: rgba(239, 68, 68, var(--tw-bg-opacity));
+        }
+        
+        /* Calendar styles */
+        .calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 2px;
+        }
+        
+        .calendar-day {
+            aspect-ratio: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.75rem;
+            border-radius: 4px;
+        }
+        
+        .calendar-day.weekend {
+            opacity: 0.8;
+        }
+        
+        .calendar-day.empty {
+            background-color: transparent;
+        }
+        
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            .calendar-container {
+                overflow-x: auto;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <div class="bg-white rounded-lg shadow-lg p-6">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
+                <div>
+                    <h1 class="text-2xl font-bold text-gray-800 mb-2">DAILY RETURNS</h1>
+                    <div class="flex space-x-4">
+                        <a href="/" class="text-gray-600 hover:text-blue-600 transition">Monthly View</a>
+                        <a href="/daily" class="text-blue-600 font-medium border-b-2 border-blue-600">Daily View</a>
+                    </div>
+                </div>
+                <div class="flex flex-col md:flex-row space-y-2 md:space-y-0 md:space-x-4 mt-4 md:mt-0">
+                    <div class="flex items-center">
+                        <label for="ticker" class="mr-2 text-gray-700">Ticker:</label>
+                        <input type="text" id="ticker" class="border rounded px-2 py-1 w-24" value="TSLA">
+                    </div>
+                    <button id="refresh-btn" class="bg-blue-600 text-white px-4 py-1 rounded hover:bg-blue-700 transition">
+                        Refresh Data
+                    </button>
+                </div>
+            </div>
+            
+            <p id="description" class="mb-6 text-gray-700">
+                The calendars below show daily returns of <span id="ticker-name">TSLA</span> with color intensity representing the magnitude of returns. Green indicates positive returns, red indicates negative returns.
+            </p>
+            
+            <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center">
+                    <label for="year-select" class="mr-2 text-gray-700">Year:</label>
+                    <select id="year-select" class="border rounded px-2 py-1">
+                        <!-- Years will be populated by JavaScript -->
+                    </select>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <div class="flex items-center">
+                        <div class="w-4 h-4 bg-red-500 mr-1"></div>
+                        <span class="text-sm">Negative</span>
+                    </div>
+                    <div class="flex items-center">
+                        <div class="w-4 h-4 bg-green-500 mr-1"></div>
+                        <span class="text-sm">Positive</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="calendars-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <!-- Calendars will be populated by JavaScript -->
+                <div class="text-center py-8">Loading data...</div>
+            </div>
+            
+            <div id="error-message" class="mt-4 text-red-600 hidden"></div>
+        </div>
+    </div>
+    
+    <script>
+        // Function to fetch data from the API
+        async function fetchDailyReturns(ticker, refresh = false) {
+            try {
+                document.getElementById('error-message').classList.add('hidden');
+                
+                const url = `/api/daily-returns?ticker=${ticker}&refresh=${refresh}`;
+                const response = await fetch(url);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                
+                return data;
+            } catch (error) {
+                const errorElement = document.getElementById('error-message');
+                errorElement.textContent = `Error: ${error.message}`;
+                errorElement.classList.remove('hidden');
+                return null;
+            }
+        }
+        
+        // Function to update the year select dropdown
+        function updateYearSelect(data) {
+            if (!data || !data.years || data.years.length === 0) return;
+            
+            const yearSelect = document.getElementById('year-select');
+            yearSelect.innerHTML = '';
+            
+            data.years.forEach(year => {
+                const option = document.createElement('option');
+                option.value = year;
+                option.textContent = year;
+                yearSelect.appendChild(option);
+            });
+            
+            // Select the most recent year by default
+            yearSelect.value = data.years[data.years.length - 1];
+            
+            // Trigger change event to display the selected year
+            yearSelect.dispatchEvent(new Event('change'));
+        }
+        
+        // Function to create a calendar for a month
+        function createMonthCalendar(year, month, monthData) {
+            if (!monthData) return null;
+            
+            const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+            
+            const calendarDiv = document.createElement('div');
+            calendarDiv.className = 'border rounded-lg p-4';
+            
+            // Month header
+            const monthHeader = document.createElement('h3');
+            monthHeader.className = 'text-lg font-semibold mb-2 text-center';
+            monthHeader.textContent = `${monthNames[parseInt(month) - 1]} ${year}`;
+            calendarDiv.appendChild(monthHeader);
+            
+            // Day headers
+            const dayHeadersDiv = document.createElement('div');
+            dayHeadersDiv.className = 'calendar-grid mb-1';
+            
+            dayNames.forEach(day => {
+                const dayHeader = document.createElement('div');
+                dayHeader.className = 'text-xs text-center font-medium text-gray-600';
+                dayHeader.textContent = day;
+                dayHeadersDiv.appendChild(dayHeader);
+            });
+            
+            calendarDiv.appendChild(dayHeadersDiv);
+            
+            // Calendar grid
+            const gridDiv = document.createElement('div');
+            gridDiv.className = 'calendar-grid';
+            
+            // Get the first day of the month (0 = Monday, 6 = Sunday)
+            const firstDay = new Date(year, parseInt(month) - 1, 1).getDay();
+            // Adjust for Monday as first day of week (0 = Monday in our grid)
+            const firstDayAdjusted = (firstDay === 0) ? 6 : firstDay - 1;
+            
+            // Add empty cells for days before the 1st of the month
+            for (let i = 0; i < firstDayAdjusted; i++) {
+                const emptyDay = document.createElement('div');
+                emptyDay.className = 'calendar-day empty';
+                gridDiv.appendChild(emptyDay);
+            }
+            
+            // Add days of the month
+            const daysInMonth = monthData.length;
+            
+            for (let day = 0; day < daysInMonth; day++) {
+                const dayData = monthData[day];
+                const dayCell = document.createElement('div');
+                dayCell.className = 'calendar-day';
+                
+                // Add day number
+                dayCell.textContent = day + 1;
+                
+                if (dayData) {
+                    const returnValue = dayData.return;
+                    const weekday = dayData.weekday;
+                    
+                    // Weekend styling
+                    if (weekday >= 5) { // 5 = Saturday, 6 = Sunday
+                        dayCell.classList.add('weekend');
+                    }
+                    
+                    // Get all returns to calculate color gradation
+                    const allReturns = [];
+                    Object.values(data.data[year]).forEach(monthData => {
+                        monthData.forEach(day => {
+                            if (day && day.return !== null && day.return !== undefined) {
+                                allReturns.push(day.return);
+                            }
+                        });
+                    });
+                    
+                    // Sort returns to find min and max for color scaling
+                    const sortedReturns = [...allReturns].sort((a, b) => a - b);
+                    const minReturn = sortedReturns[0] || -1;
+                    const maxReturn = sortedReturns[sortedReturns.length - 1] || 1;
+                    
+                    // Apply color based on value
+                    const opacity = getColorOpacity(returnValue, minReturn, maxReturn);
+                    if (returnValue >= 0) {
+                        dayCell.style.backgroundColor = `rgba(52, 211, 153, ${opacity})`;
+                    } else {
+                        dayCell.style.backgroundColor = `rgba(239, 68, 68, ${opacity})`;
+                    }
+                    
+                    // Add tooltip with the actual return value
+                    dayCell.title = `${returnValue.toFixed(2)}%`;
+                }
+                
+                gridDiv.appendChild(dayCell);
+            }
+            
+            calendarDiv.appendChild(gridDiv);
+            return calendarDiv;
+        }
+        
+        // Function to display calendars for a specific year
+        function displayYearCalendars(year) {
+            if (!data || !data.data || !data.data[year]) return;
+            
+            const calendarsContainer = document.getElementById('calendars-container');
+            calendarsContainer.innerHTML = '';
+            
+            const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            
+            // Create a calendar for each month
+            monthNames.forEach((monthName, index) => {
+                const monthNumber = index + 1;
+                const monthData = data.data[year][monthName];
+                
+                if (monthData) {
+                    const calendar = createMonthCalendar(year, monthNumber, monthData);
+                    if (calendar) {
+                        calendarsContainer.appendChild(calendar);
+                    }
+                } else {
+                    // Create an empty calendar for months without data
+                    const emptyCalendar = document.createElement('div');
+                    emptyCalendar.className = 'border rounded-lg p-4';
+                    
+                    const monthHeader = document.createElement('h3');
+                    monthHeader.className = 'text-lg font-semibold mb-2 text-center';
+                    monthHeader.textContent = `${monthName} ${year}`;
+                    emptyCalendar.appendChild(monthHeader);
+                    
+                    const emptyMessage = document.createElement('div');
+                    emptyMessage.className = 'text-center py-8 text-gray-500';
+                    emptyMessage.textContent = 'No data available';
+                    emptyCalendar.appendChild(emptyMessage);
+                    
+                    calendarsContainer.appendChild(emptyCalendar);
+                }
+            });
+        }
+        
+        // Function to calculate color opacity based on value
+        function getColorOpacity(value, min, max) {
+            // Ensure we don't divide by zero
+            if (value >= 0) {
+                // For positive values, scale from 0.1 to 1.0
+                return max <= 0 ? 0.5 : 0.1 + 0.9 * (value / max);
+            } else {
+                // For negative values, scale from 0.1 to 1.0
+                return min >= 0 ? 0.5 : 0.1 + 0.9 * (Math.abs(value) / Math.abs(min));
+            }
+        }
+        
+        // Global data variable
+        let data = null;
+        
+        // Initial load
+        document.addEventListener('DOMContentLoaded', async () => {
+            const ticker = document.getElementById('ticker').value;
+            data = await fetchDailyReturns(ticker);
+            
+            if (data) {
+                // Update ticker name in the description
+                document.getElementById('ticker-name').textContent = data.ticker;
+                
+                // Update year select dropdown
+                updateYearSelect(data);
+                
+                // Set up event listeners
+                document.getElementById('year-select').addEventListener('change', (e) => {
+                    const selectedYear = e.target.value;
+                    displayYearCalendars(selectedYear);
+                });
+                
+                document.getElementById('refresh-btn').addEventListener('click', async () => {
+                    const ticker = document.getElementById('ticker').value;
+                    data = await fetchDailyReturns(ticker, true);
+                    
+                    if (data) {
+                        document.getElementById('ticker-name').textContent = data.ticker;
+                        updateYearSelect(data);
+                    }
+                });
+                
+                document.getElementById('ticker').addEventListener('keypress', async (e) => {
+                    if (e.key === 'Enter') {
+                        const ticker = e.target.value;
+                        data = await fetchDailyReturns(ticker);
+                        
+                        if (data) {
+                            document.getElementById('ticker-name').textContent = data.ticker;
+                            updateYearSelect(data);
+                        }
+                    }
+                });
+            }
+        });
+    </script>
+</body>
+</html>

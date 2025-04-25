@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monthly Returns</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles for the color gradation */
+        .positive-return {
+            background-color: rgba(52, 211, 153, var(--tw-bg-opacity));
+        }
+        .negative-return {
+            background-color: rgba(239, 68, 68, var(--tw-bg-opacity));
+        }
+
+        /* Responsive table styles */
+        @media (max-width: 768px) {
+            .responsive-table {
+                display: block;
+                overflow-x: auto;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <div class="bg-white rounded-lg shadow-lg p-6">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
+                <div>
+                    <h1 class="text-2xl font-bold text-gray-800 mb-2">MONTHLY RETURNS</h1>
+                    <div class="flex space-x-4">
+                        <a href="/" class="text-blue-600 font-medium border-b-2 border-blue-600">Monthly View</a>
+                        <a href="/daily" class="text-gray-600 hover:text-blue-600 transition">Daily View</a>
+                    </div>
+                </div>
+                <div class="flex flex-col md:flex-row space-y-2 md:space-y-0 md:space-x-4 mt-4 md:mt-0">
+                    <div class="flex items-center">
+                        <label for="ticker" class="mr-2 text-gray-700">Ticker:</label>
+                        <input type="text" id="ticker" class="border rounded px-2 py-1 w-24" value="TSLA">
+                    </div>
+                    <button id="refresh-btn" class="bg-blue-600 text-white px-4 py-1 rounded hover:bg-blue-700 transition">
+                        Refresh Data
+                    </button>
+                </div>
+            </div>
+
+            <p id="description" class="mb-6 text-gray-700">
+                The table below presents the monthly returns of <span id="ticker-name">TSLA</span>, with color gradation from worst to best to easily spot seasonal factors. Returns are adjusted for dividends.
+            </p>
+
+            <div class="responsive-table">
+                <table class="min-w-full border-collapse">
+                    <thead>
+                        <tr>
+                            <th class="border px-4 py-2 bg-gray-100 text-left">Year</th>
+                            <th class="border px-4 py-2 bg-gray-100 text-center">Jan</th>
+                            <th class="border px-4 py-2 bg-gray-100 text-center">Feb</th>
+                            <th class="border px-4 py-2 bg-gray-100 text-center">Mar</th>
+                            <th class="border px-4 py-2 bg-gray-100 text-center">Apr</th>
+                            <th class="border px-4 py-2 bg-gray-100 text-center">May</th>
+                            <th class="border px-4 py-2 bg-gray-100 text-center">Jun</th>
+                            <th class="border px-4 py-2 bg-gray-100 text-center">Jul</th>
+                            <th class="border px-4 py-2 bg-gray-100 text-center">Aug</th>
+                            <th class="border px-4 py-2 bg-gray-100 text-center">Sep</th>
+                            <th class="border px-4 py-2 bg-gray-100 text-center">Oct</th>
+                            <th class="border px-4 py-2 bg-gray-100 text-center">Nov</th>
+                            <th class="border px-4 py-2 bg-gray-100 text-center">Dec</th>
+                            <th class="border px-4 py-2 bg-gray-100 text-center">Total</th>
+                        </tr>
+                    </thead>
+                    <tbody id="returns-table-body">
+                        <!-- Data will be populated by JavaScript -->
+                        <tr>
+                            <td colspan="14" class="border px-4 py-2 text-center">Loading data...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div id="error-message" class="mt-4 text-red-600 hidden"></div>
+        </div>
+    </div>
+
+    <script>
+        // Function to fetch data from the API
+        async function fetchMonthlyReturns(ticker, refresh = false) {
+            try {
+                document.getElementById('error-message').classList.add('hidden');
+
+                const url = `/api/monthly-returns?ticker=${ticker}&refresh=${refresh}`;
+                const response = await fetch(url);
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+
+                return data;
+            } catch (error) {
+                const errorElement = document.getElementById('error-message');
+                errorElement.textContent = `Error: ${error.message}`;
+                errorElement.classList.remove('hidden');
+                return null;
+            }
+        }
+
+        // Function to update the table with data
+        function updateTable(data) {
+            if (!data) return;
+
+            const tableBody = document.getElementById('returns-table-body');
+            tableBody.innerHTML = '';
+
+            // Update ticker name in the description
+            document.getElementById('ticker-name').textContent = data.ticker;
+
+            // Get all return values to calculate color gradation
+            const allReturns = [];
+            for (const month in data.data) {
+                data.data[month].forEach(value => {
+                    if (value !== null && value !== undefined && !isNaN(value)) {
+                        allReturns.push(value);
+                    }
+                });
+            }
+
+            // Sort returns to find min and max for color scaling
+            const sortedReturns = [...allReturns].sort((a, b) => a - b);
+            const minReturn = sortedReturns[0] || -1; // Default to -1 if no negative returns
+            const maxReturn = sortedReturns[sortedReturns.length - 1] || 1; // Default to 1 if no positive returns
+
+            // Create rows for each year
+            data.years.forEach((year, index) => {
+                const row = document.createElement('tr');
+
+                // Add year cell
+                const yearCell = document.createElement('td');
+                yearCell.className = 'border px-4 py-2 font-medium';
+                yearCell.textContent = year;
+                row.appendChild(yearCell);
+
+                // Add month cells
+                const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Total'];
+
+                months.forEach(month => {
+                    const cell = document.createElement('td');
+                    cell.className = 'border px-4 py-2 text-center';
+
+                    const value = data.data[month] ? data.data[month][index] : null;
+
+                    if (value !== null && value !== undefined && !isNaN(value)) {
+                        // Format the value with 2 decimal places
+                        cell.textContent = value.toFixed(2) + '%';
+
+                        // Apply color based on value
+                        const opacity = getColorOpacity(value, minReturn, maxReturn);
+                        if (value >= 0) {
+                            cell.style.backgroundColor = `rgba(52, 211, 153, ${opacity})`;
+                        } else {
+                            cell.style.backgroundColor = `rgba(239, 68, 68, ${opacity})`;
+                        }
+                    } else {
+                        cell.textContent = '-';
+                    }
+
+                    row.appendChild(cell);
+                });
+
+                tableBody.appendChild(row);
+            });
+        }
+
+        // Function to calculate color opacity based on value
+        function getColorOpacity(value, min, max) {
+            // Ensure we don't divide by zero
+            if (value >= 0) {
+                // For positive values, scale from 0.1 to 1.0
+                return max <= 0 ? 0.5 : 0.1 + 0.9 * (value / max);
+            } else {
+                // For negative values, scale from 0.1 to 1.0
+                return min >= 0 ? 0.5 : 0.1 + 0.9 * (Math.abs(value) / Math.abs(min));
+            }
+        }
+
+        // Initial load
+        document.addEventListener('DOMContentLoaded', async () => {
+            const ticker = document.getElementById('ticker').value;
+            const data = await fetchMonthlyReturns(ticker);
+            updateTable(data);
+
+            // Set up event listeners
+            document.getElementById('refresh-btn').addEventListener('click', async () => {
+                const ticker = document.getElementById('ticker').value;
+                const data = await fetchMonthlyReturns(ticker, true);
+                updateTable(data);
+            });
+
+            document.getElementById('ticker').addEventListener('keypress', async (e) => {
+                if (e.key === 'Enter') {
+                    const ticker = e.target.value;
+                    const data = await fetchMonthlyReturns(ticker);
+                    updateTable(data);
+                }
+            });
+        });
+    </script>
+</body>
+</html>

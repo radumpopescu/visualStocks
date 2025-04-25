@@ -1,0 +1,47 @@
+/* Additional styles for monthly returns visualization */
+
+.table-container {
+    overflow-x: auto;
+    max-width: 100%;
+}
+
+.returns-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.returns-table th,
+.returns-table td {
+    padding: 0.5rem 0.75rem;
+    text-align: center;
+    border: 1px solid #e5e7eb;
+}
+
+.returns-table th {
+    background-color: #f3f4f6;
+    font-weight: 600;
+}
+
+.returns-table tr:hover {
+    background-color: #f9fafb;
+}
+
+/* Year column */
+.returns-table td:first-child {
+    font-weight: 600;
+    text-align: left;
+}
+
+/* Total column */
+.returns-table td:last-child {
+    font-weight: 600;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .returns-table th,
+    .returns-table td {
+        padding: 0.25rem 0.5rem;
+        font-size: 0.875rem;
+    }
+}

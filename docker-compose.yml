@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  monthly-returns:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: monthly-returns:latest
+    container_name: monthly-returns
+    ports:
+      - "8080:8080"
+    volumes:
+      # Mount a volume for persistent cache storage
+      - monthly-returns-cache:/app/.stooq_cache
+    environment:
+      - PORT=8080
+      - TICKER=TSLA
+    restart: always  # Automatically restart the container if it crashes
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
+volumes:
+  monthly-returns-cache:  # Define a named volume for persistent cache storage

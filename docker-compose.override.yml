@@ -1,0 +1,16 @@
+version: '3.8'
+
+# This file is used for development and is automatically merged with docker-compose.yml
+# It adds development-specific settings
+
+services:
+  monthly-returns:
+    # Mount the source code for development
+    volumes:
+      - ./monthly_returns.py:/app/monthly_returns.py
+      - ./templates:/app/templates
+      - ./static:/app/static
+    environment:
+      - DEBUG=true  # Enable debug mode for development
+    # Override the command to enable auto-reloading
+    command: ["python", "monthly_returns.py", "--debug"]
