@@ -1,7 +1,8 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import useStore from '../store';
 import cl from '../helpers/classNames';
+import TickerSelector from '../components/TickerSelector';
 
 export default function MonthlyReturns() {
   const {
@@ -13,13 +14,8 @@ export default function MonthlyReturns() {
     error,
     currentTicker,
     secondaryTicker,
-    setTicker,
-    setSecondaryTicker,
     compareMode,
-    toggleCompareMode,
-    shouldRefreshData,
-    availableStocks,
-    addCustomStock
+    shouldRefreshData
   } = useStore((state) => ({
     fetchMonthlyReturns: state.fetchMonthlyReturns,
     fetchSecondaryMonthlyReturns: state.fetchSecondaryMonthlyReturns,
@@ -29,18 +25,9 @@ export default function MonthlyReturns() {
     error: state.error,
     currentTicker: state.currentTicker,
     secondaryTicker: state.secondaryTicker,
-    setTicker: state.setTicker,
-    setSecondaryTicker: state.setSecondaryTicker,
     compareMode: state.compareMode,
-    toggleCompareMode: state.toggleCompareMode,
-    shouldRefreshData: state.shouldRefreshData,
-    availableStocks: state.availableStocks,
-    addCustomStock: state.addCustomStock
+    shouldRefreshData: state.shouldRefreshData
   }));
-
-  const [showCustomInput, setShowCustomInput] = useState(false);
-  const [customTicker, setCustomTicker] = useState('');
-  const customInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     // Check if we need to refresh the data (it's older than 1 day)
@@ -52,96 +39,7 @@ export default function MonthlyReturns() {
       const secondaryNeedsRefresh = shouldRefreshData(secondaryTicker);
       fetchSecondaryMonthlyReturns(secondaryTicker, secondaryNeedsRefresh);
     }
-  }, [compareMode, currentTicker, secondaryTicker]);
-
-  // Function to handle ticker selection change
-  const handleTickerChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const value = e.target.value;
-
-    if (value === 'add-custom') {
-      setShowCustomInput(true);
-      setTimeout(() => {
-        customInputRef.current?.focus();
-      }, 0);
-    } else {
-      setTicker(value);
-      fetchMonthlyReturns(value, shouldRefreshData(value));
-    }
-  };
-
-  // Function to handle secondary ticker selection change
-  const handleSecondaryTickerChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const value = e.target.value;
-
-    if (value === 'add-custom') {
-      setShowCustomInput(true);
-      setTimeout(() => {
-        customInputRef.current?.focus();
-      }, 0);
-    } else if (value === 'none') {
-      setSecondaryTicker(null);
-      if (compareMode) {
-        toggleCompareMode();
-      }
-    } else {
-      setSecondaryTicker(value);
-      if (!compareMode) {
-        toggleCompareMode();
-      }
-      fetchSecondaryMonthlyReturns(value, shouldRefreshData(value));
-    }
-  };
-
-  // Function to handle custom ticker input change
-  const handleCustomTickerChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setCustomTicker(e.target.value.toUpperCase());
-  };
-
-  // Function to handle custom ticker input keypress
-  const handleCustomTickerKeyPress = async (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && customTicker.trim()) {
-      try {
-        // Try to fetch data for the ticker first
-        await fetchMonthlyReturns(customTicker, true);
-
-        // If successful, add the stock to the custom list
-        addCustomStock(customTicker);
-        setTicker(customTicker);
-        setShowCustomInput(false);
-        setCustomTicker('');
-      } catch (error) {
-        // If there's an error, don't add the stock and reset to TSLA
-        setTicker('TSLA');
-        fetchMonthlyReturns('TSLA', false);
-      }
-    }
-  };
-
-  // Function to handle add custom ticker button click
-  const handleAddCustomTicker = async () => {
-    if (customTicker.trim()) {
-      try {
-        // Try to fetch data for the ticker first
-        await fetchMonthlyReturns(customTicker, true);
-
-        // If successful, add the stock to the custom list
-        addCustomStock(customTicker);
-        setTicker(customTicker);
-        setShowCustomInput(false);
-        setCustomTicker('');
-      } catch (error) {
-        // If there's an error, don't add the stock and reset to TSLA
-        setTicker('TSLA');
-        fetchMonthlyReturns('TSLA', false);
-      }
-    }
-  };
-
-  // Function to cancel adding custom ticker
-  const handleCancelCustomTicker = () => {
-    setShowCustomInput(false);
-    setCustomTicker('');
-  };
+  }, [compareMode, currentTicker, secondaryTicker, fetchMonthlyReturns, fetchSecondaryMonthlyReturns, shouldRefreshData]);
 
   // Function to calculate color opacity based on value
   const getColorOpacity = (value: number, min: number, max: number) => {
@@ -157,7 +55,7 @@ export default function MonthlyReturns() {
   // Get all return values to calculate color gradation
   const allReturns: number[] = [];
   if (monthlyReturnsData) {
-    Object.entries(monthlyReturnsData.data).forEach(([_, values]) => {
+    Object.values(monthlyReturnsData.data).forEach((values) => {
       values.forEach((value) => {
         if (value !== null && !isNaN(value)) {
           allReturns.push(value);
@@ -168,7 +66,7 @@ export default function MonthlyReturns() {
 
   // Add secondary data returns for color scaling if in compare mode
   if (compareMode && secondaryMonthlyReturnsData) {
-    Object.entries(secondaryMonthlyReturnsData.data).forEach(([_, values]) => {
+    Object.values(secondaryMonthlyReturnsData.data).forEach((values) => {
       values.forEach((value) => {
         if (value !== null && !isNaN(value)) {
           allReturns.push(value);
@@ -205,82 +103,11 @@ export default function MonthlyReturns() {
                 </Link>
               </div>
             </div>
-            <div className="flex flex-col md:flex-row space-y-2 md:space-y-0 md:space-x-4 mt-4 md:mt-0">
-              {!showCustomInput ? (
-                <div className="flex flex-col md:flex-row space-y-2 md:space-y-0 md:space-x-4">
-                  <div className="flex items-center">
-                    <label htmlFor="ticker" className="mr-2 text-gray-700">
-                      Ticker:
-                    </label>
-                    <select
-                      id="ticker"
-                      className="border rounded px-2 py-1"
-                      value={currentTicker}
-                      onChange={handleTickerChange}
-                      disabled={isLoading}
-                    >
-                      {availableStocks.map((stock) => (
-                        <option key={stock} value={stock}>
-                          {stock}
-                        </option>
-                      ))}
-                      <option value="add-custom">+ Add Custom...</option>
-                    </select>
-                  </div>
-
-                  <div className="flex items-center">
-                    <label htmlFor="secondary-ticker" className="mr-2 text-gray-700">
-                      Compare with:
-                    </label>
-                    <select
-                      id="secondary-ticker"
-                      className="border rounded px-2 py-1"
-                      value={secondaryTicker || 'none'}
-                      onChange={handleSecondaryTickerChange}
-                      disabled={isLoading}
-                    >
-                      <option value="none">None</option>
-                      {availableStocks
-                        .filter(stock => stock !== currentTicker)
-                        .map((stock) => (
-                          <option key={stock} value={stock}>
-                            {stock}
-                          </option>
-                      ))}
-                      <option value="add-custom">+ Add Custom...</option>
-                    </select>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex items-center space-x-2">
-                  <label htmlFor="custom-ticker" className="mr-2 text-gray-700">
-                    Custom Ticker:
-                  </label>
-                  <input
-                    ref={customInputRef}
-                    type="text"
-                    id="custom-ticker"
-                    className="border rounded px-2 py-1 w-24"
-                    value={customTicker}
-                    onChange={handleCustomTickerChange}
-                    onKeyDown={handleCustomTickerKeyPress}
-                    placeholder="e.g. AAPL"
-                  />
-                  <button
-                    className="bg-green-600 text-white px-2 py-1 rounded hover:bg-green-700 transition text-sm"
-                    onClick={handleAddCustomTicker}
-                  >
-                    Add
-                  </button>
-                  <button
-                    className="bg-gray-400 text-white px-2 py-1 rounded hover:bg-gray-500 transition text-sm"
-                    onClick={handleCancelCustomTicker}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              )}
-            </div>
+            <TickerSelector
+              fetchPrimaryData={fetchMonthlyReturns}
+              fetchSecondaryData={fetchSecondaryMonthlyReturns}
+              isLoading={isLoading}
+            />
           </div>
 
           <p className="mb-6 text-gray-700">

@@ -61,6 +61,7 @@ type StoreType = {
   availableStocks: string[];
   customStocks: string[];
   addCustomStock: (ticker: string) => void;
+  removeCustomStock: (ticker: string) => void;
 
   // Refresh metadata
   refreshMetadata: RefreshMetadata;
@@ -69,15 +70,15 @@ type StoreType = {
 
   // Monthly returns state and actions
   monthlyReturnsData: MonthlyReturnsData | null;
-  fetchMonthlyReturns: (ticker: string, refresh: boolean) => Promise<void>;
+  fetchMonthlyReturns: (ticker: string, refresh: boolean) => Promise<MonthlyReturnsData>;
   secondaryMonthlyReturnsData: MonthlyReturnsData | null;
-  fetchSecondaryMonthlyReturns: (ticker: string, refresh: boolean) => Promise<void>;
+  fetchSecondaryMonthlyReturns: (ticker: string, refresh: boolean) => Promise<MonthlyReturnsData>;
 
   // Daily returns state and actions
   dailyReturnsData: DailyReturnsData | null;
-  fetchDailyReturns: (ticker: string, refresh: boolean) => Promise<void>;
+  fetchDailyReturns: (ticker: string, refresh: boolean) => Promise<DailyReturnsData>;
   secondaryDailyReturnsData: DailyReturnsData | null;
-  fetchSecondaryDailyReturns: (ticker: string, refresh: boolean) => Promise<void>;
+  fetchSecondaryDailyReturns: (ticker: string, refresh: boolean) => Promise<DailyReturnsData>;
 };
 
 const useStore = create<StoreType>()(
@@ -120,6 +121,22 @@ const useStore = create<StoreType>()(
           return {
             customStocks: [...state.customStocks, upperTicker],
             availableStocks: [...DEFAULT_STOCKS, ...state.customStocks, upperTicker],
+          };
+        });
+      },
+      removeCustomStock: (ticker: string) => {
+        const upperTicker = ticker.toUpperCase();
+        set((state) => {
+          // Skip if it's a default stock or not in custom stocks
+          if (DEFAULT_STOCKS.includes(upperTicker) || !state.customStocks.includes(upperTicker)) {
+            return state;
+          }
+
+          // Remove from custom stocks
+          const newCustomStocks = state.customStocks.filter((stock) => stock !== upperTicker);
+          return {
+            customStocks: newCustomStocks,
+            availableStocks: [...DEFAULT_STOCKS, ...newCustomStocks],
           };
         });
       },
@@ -203,6 +220,23 @@ const useStore = create<StoreType>()(
             refresh,
           });
 
+          // Check if we have valid data
+          if (!result || !result.data || Object.keys(result.data).length === 0) {
+            throw new Error(`No data found for ticker ${upperTicker}`);
+          }
+
+          // Check if the data has any non-null values
+          let hasData = false;
+          Object.values(result.data).forEach((values) => {
+            if (values.some((value) => value !== null)) {
+              hasData = true;
+            }
+          });
+
+          if (!hasData) {
+            throw new Error(`No data found for ticker ${upperTicker}`);
+          }
+
           // Update refresh metadata
           get().updateRefreshMetadata(upperTicker);
 
@@ -211,11 +245,14 @@ const useStore = create<StoreType>()(
             isLoading: false,
             currentTicker: upperTicker,
           });
+
+          return result;
         } catch (error) {
           set({
             error: error instanceof Error ? error.message : 'Unknown error',
             isLoading: false,
           });
+          throw error;
         }
       },
 
@@ -231,6 +268,28 @@ const useStore = create<StoreType>()(
             refresh,
           });
 
+          // Check if we have valid data
+          if (!result || !result.data || Object.keys(result.data).length === 0) {
+            throw new Error(`No data found for ticker ${upperTicker}`);
+          }
+
+          // Check if any year has data
+          let hasData = false;
+          Object.values(result.data).forEach((yearData) => {
+            if (Object.keys(yearData).length > 0) {
+              // Check if any month has data
+              Object.values(yearData).forEach((monthData) => {
+                if (monthData && monthData.some((day) => day !== null)) {
+                  hasData = true;
+                }
+              });
+            }
+          });
+
+          if (!hasData) {
+            throw new Error(`No data found for ticker ${upperTicker}`);
+          }
+
           // Update refresh metadata
           get().updateRefreshMetadata(upperTicker);
 
@@ -239,18 +298,21 @@ const useStore = create<StoreType>()(
             isLoading: false,
             currentTicker: upperTicker,
           });
+
+          return result;
         } catch (error) {
           set({
             error: error instanceof Error ? error.message : 'Unknown error',
             isLoading: false,
           });
+          throw error;
         }
       },
 
       // Fetch secondary monthly returns data
       fetchSecondaryMonthlyReturns: async (ticker: string, refresh: boolean) => {
         try {
-          if (!ticker) return;
+          if (!ticker) throw new Error('No ticker provided');
 
           const upperTicker = ticker.toUpperCase();
 
@@ -260,6 +322,23 @@ const useStore = create<StoreType>()(
             refresh,
           });
 
+          // Check if we have valid data
+          if (!result || !result.data || Object.keys(result.data).length === 0) {
+            throw new Error(`No data found for ticker ${upperTicker}`);
+          }
+
+          // Check if the data has any non-null values
+          let hasData = false;
+          Object.values(result.data).forEach((values) => {
+            if (values.some((value) => value !== null)) {
+              hasData = true;
+            }
+          });
+
+          if (!hasData) {
+            throw new Error(`No data found for ticker ${upperTicker}`);
+          }
+
           // Update refresh metadata
           get().updateRefreshMetadata(upperTicker);
 
@@ -267,17 +346,20 @@ const useStore = create<StoreType>()(
             secondaryMonthlyReturnsData: result,
             secondaryTicker: upperTicker,
           });
+
+          return result;
         } catch (error) {
           set({
             error: error instanceof Error ? error.message : 'Unknown error',
           });
+          throw error;
         }
       },
 
       // Fetch secondary daily returns data
       fetchSecondaryDailyReturns: async (ticker: string, refresh: boolean) => {
         try {
-          if (!ticker) return;
+          if (!ticker) throw new Error('No ticker provided');
 
           const upperTicker = ticker.toUpperCase();
 
@@ -287,6 +369,28 @@ const useStore = create<StoreType>()(
             refresh,
           });
 
+          // Check if we have valid data
+          if (!result || !result.data || Object.keys(result.data).length === 0) {
+            throw new Error(`No data found for ticker ${upperTicker}`);
+          }
+
+          // Check if any year has data
+          let hasData = false;
+          Object.values(result.data).forEach((yearData) => {
+            if (Object.keys(yearData).length > 0) {
+              // Check if any month has data
+              Object.values(yearData).forEach((monthData) => {
+                if (monthData && monthData.some((day) => day !== null)) {
+                  hasData = true;
+                }
+              });
+            }
+          });
+
+          if (!hasData) {
+            throw new Error(`No data found for ticker ${upperTicker}`);
+          }
+
           // Update refresh metadata
           get().updateRefreshMetadata(upperTicker);
 
@@ -294,10 +398,13 @@ const useStore = create<StoreType>()(
             secondaryDailyReturnsData: result,
             secondaryTicker: upperTicker,
           });
+
+          return result;
         } catch (error) {
           set({
             error: error instanceof Error ? error.message : 'Unknown error',
           });
+          throw error;
         }
       },
     }),

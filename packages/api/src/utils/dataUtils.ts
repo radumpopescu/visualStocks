@@ -65,11 +65,21 @@ async function fetchStooqData(ticker: string): Promise<StockData[]> {
   try {
     const response = await axios.get(url, { timeout: 30000 });
 
+    // Check for rate limit response
+    if (response.data.includes('Exceeded the daily hits limit')) {
+      throw new Error('RATE_LIMIT_EXCEEDED');
+    }
+
     // Parse CSV data
     const records = parse(response.data, {
       columns: true,
       skip_empty_lines: true,
     });
+
+    // Check if we got valid data
+    if (!records || records.length === 0) {
+      throw new Error('NO_DATA_RETURNED');
+    }
 
     // Convert to proper types
     return records.map((record: any) => ({
@@ -81,6 +91,12 @@ async function fetchStooqData(ticker: string): Promise<StockData[]> {
       Volume: parseInt(record.Volume, 10),
     }));
   } catch (error) {
+    if (error instanceof Error && error.message === 'RATE_LIMIT_EXCEEDED') {
+      throw new Error(`Rate limit exceeded for Stooq API when fetching ${ticker}. Try again later.`);
+    }
+    if (error instanceof Error && error.message === 'NO_DATA_RETURNED') {
+      throw new Error(`No data returned from Stooq for ${ticker}.`);
+    }
     throw new Error(`Failed to download data for ${ticker}: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
@@ -185,24 +201,58 @@ export async function loadData(ticker: string, forceRefresh = false): Promise<St
   // Check if we should refresh based on metadata
   const shouldRefresh = shouldRefreshData(upperTicker);
 
-  if (forceRefresh || !fs.existsSync(cacheFile) || shouldRefresh) {
-    const data = await fetchStooqData(upperTicker);
+  // Check if cache exists
+  const cacheExists = fs.existsSync(cacheFile);
 
-    // Save to cache
-    const csvContent = [
-      'Date,Open,High,Low,Close,Volume',
-      ...data.map((row) => `${row.Date.toISOString().split('T')[0]},${row.Open},${row.High},${row.Low},${row.Close},${row.Volume}`),
-    ].join('\n');
+  // Try to fetch fresh data if needed
+  if (forceRefresh || !cacheExists || shouldRefresh) {
+    try {
+      const data = await fetchStooqData(upperTicker);
 
-    fs.writeFileSync(cacheFile, csvContent);
+      // Only save to cache if we got valid data
+      if (data && data.length > 0) {
+        // Save to cache
+        const csvContent = [
+          'Date,Open,High,Low,Close,Volume',
+          ...data.map((row) => `${row.Date.toISOString().split('T')[0]},${row.Open},${row.High},${row.Low},${row.Close},${row.Volume}`),
+        ].join('\n');
 
-    // Update metadata
-    updateMetadata(upperTicker);
-    return data;
+        fs.writeFileSync(cacheFile, csvContent);
+
+        // Update metadata
+        updateMetadata(upperTicker);
+        return data;
+      } else if (cacheExists) {
+        // If no data returned but cache exists, use cache
+        console.log(`No data returned for ${upperTicker}, using cached data`);
+      } else {
+        // No data and no cache
+        throw new Error(`No data found for ticker ${upperTicker}`);
+      }
+    } catch (error) {
+      // If fetch fails but we have cache, use it
+      if (cacheExists) {
+        console.error(`Error fetching fresh data for ${upperTicker}, using cached data:`, error);
+      } else {
+        // No cache and fetch failed
+        throw error;
+      }
+    }
+  }
+
+  // If we reach here, we're using cached data
+  if (!cacheExists) {
+    throw new Error(`No cached data found for ticker ${upperTicker}`);
   }
 
   // Read from cache
   const csvContent = fs.readFileSync(cacheFile, 'utf-8');
+
+  // Check if the file has content beyond the header
+  if (csvContent.trim().split('\n').length <= 1) {
+    throw new Error(`No data found in cache for ticker ${upperTicker}`);
+  }
+
   const cachedData = parse(csvContent, {
     columns: true,
     skip_empty_lines: true,
@@ -215,44 +265,51 @@ export async function loadData(ticker: string, forceRefresh = false): Promise<St
     Volume: parseInt(record.Volume, 10),
   }));
 
-  try {
-    // Check for newer data
-    const remoteData = await fetchStooqData(ticker);
-
-    // Find the latest date in cached data
-    const latestCachedDate = new Date(Math.max(...cachedData.map((item) => new Date(item.Date).getTime())));
-
-    // Filter remote data for newer entries
-    const newData = remoteData.filter((item) => new Date(item.Date) > latestCachedDate);
-
-    if (newData.length > 0) {
-      // Append new data to cached data
-      const updatedData = [...cachedData, ...newData];
-
-      // Sort by date
-      updatedData.sort((a, b) => a.Date.getTime() - b.Date.getTime());
-
-      // Save updated data to cache
-      const updatedCsvContent = [
-        'Date,Open,High,Low,Close,Volume',
-        ...updatedData.map(
-          (row) => `${row.Date.toISOString().split('T')[0]},${row.Open},${row.High},${row.Low},${row.Close},${row.Volume}`,
-        ),
-      ].join('\n');
-
-      fs.writeFileSync(cacheFile, updatedCsvContent);
-
-      // Update metadata
-      updateMetadata(upperTicker);
-      return updatedData;
-    }
-
-    return cachedData;
-  } catch (error) {
-    // If remote fetch fails, return cached data
-    console.error('Failed to check for newer data:', error);
-    return cachedData;
+  // Check if we have valid data in the cache
+  if (!cachedData || cachedData.length === 0) {
+    throw new Error(`No valid data found in cache for ticker ${upperTicker}`);
   }
+
+  // Try to update with newer data if not forcing refresh
+  if (!forceRefresh) {
+    try {
+      // Check for newer data
+      const remoteData = await fetchStooqData(ticker);
+
+      // Find the latest date in cached data
+      const latestCachedDate = new Date(Math.max(...cachedData.map((item: StockData) => new Date(item.Date).getTime())));
+
+      // Filter remote data for newer entries
+      const newData = remoteData.filter((item: StockData) => new Date(item.Date) > latestCachedDate);
+
+      if (newData.length > 0) {
+        // Append new data to cached data
+        const updatedData = [...cachedData, ...newData];
+
+        // Sort by date
+        updatedData.sort((a, b) => a.Date.getTime() - b.Date.getTime());
+
+        // Save updated data to cache
+        const updatedCsvContent = [
+          'Date,Open,High,Low,Close,Volume',
+          ...updatedData.map(
+            (row) => `${row.Date.toISOString().split('T')[0]},${row.Open},${row.High},${row.Low},${row.Close},${row.Volume}`,
+          ),
+        ].join('\n');
+
+        fs.writeFileSync(cacheFile, updatedCsvContent);
+
+        // Update metadata
+        updateMetadata(upperTicker);
+        return updatedData;
+      }
+    } catch (error) {
+      // If checking for newer data fails, just use cached data
+      console.error(`Failed to check for newer data for ${upperTicker}:`, error);
+    }
+  }
+
+  return cachedData;
 }
 
 /**

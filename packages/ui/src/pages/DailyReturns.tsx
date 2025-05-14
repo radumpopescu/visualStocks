@@ -1,7 +1,8 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import useStore from '../store';
 import cl from '../helpers/classNames';
+import TickerSelector from '../components/TickerSelector';
 
 interface DailyCalendarData {
   return: number;
@@ -18,13 +19,8 @@ export default function DailyReturns() {
     error,
     currentTicker,
     secondaryTicker,
-    setTicker,
-    setSecondaryTicker,
     compareMode,
-    toggleCompareMode,
-    shouldRefreshData,
-    availableStocks,
-    addCustomStock
+    shouldRefreshData
   } = useStore((state) => ({
     fetchDailyReturns: state.fetchDailyReturns,
     fetchSecondaryDailyReturns: state.fetchSecondaryDailyReturns,
@@ -34,18 +30,9 @@ export default function DailyReturns() {
     error: state.error,
     currentTicker: state.currentTicker,
     secondaryTicker: state.secondaryTicker,
-    setTicker: state.setTicker,
-    setSecondaryTicker: state.setSecondaryTicker,
     compareMode: state.compareMode,
-    toggleCompareMode: state.toggleCompareMode,
-    shouldRefreshData: state.shouldRefreshData,
-    availableStocks: state.availableStocks,
-    addCustomStock: state.addCustomStock
+    shouldRefreshData: state.shouldRefreshData
   }));
-
-  const [showCustomInput, setShowCustomInput] = useState(false);
-  const [customTicker, setCustomTicker] = useState('');
-  const customInputRef = useRef<HTMLInputElement>(null);
 
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
 
@@ -59,7 +46,7 @@ export default function DailyReturns() {
       const secondaryNeedsRefresh = shouldRefreshData(secondaryTicker);
       fetchSecondaryDailyReturns(secondaryTicker, secondaryNeedsRefresh);
     }
-  }, [compareMode, currentTicker, secondaryTicker]);
+  }, [compareMode, currentTicker, secondaryTicker, fetchDailyReturns, fetchSecondaryDailyReturns, shouldRefreshData]);
 
   // Combine years from both datasets when in compare mode
   const combinedYears = dailyReturnsData
@@ -73,96 +60,7 @@ export default function DailyReturns() {
       // Select the most recent year by default
       setSelectedYear(combinedYears[combinedYears.length - 1]);
     }
-  }, [dailyReturnsData, secondaryDailyReturnsData, compareMode]);
-
-  // Function to handle ticker selection change
-  const handleTickerChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const value = e.target.value;
-
-    if (value === 'add-custom') {
-      setShowCustomInput(true);
-      setTimeout(() => {
-        customInputRef.current?.focus();
-      }, 0);
-    } else {
-      setTicker(value);
-      fetchDailyReturns(value, shouldRefreshData(value));
-    }
-  };
-
-  // Function to handle secondary ticker selection change
-  const handleSecondaryTickerChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const value = e.target.value;
-
-    if (value === 'add-custom') {
-      setShowCustomInput(true);
-      setTimeout(() => {
-        customInputRef.current?.focus();
-      }, 0);
-    } else if (value === 'none') {
-      setSecondaryTicker(null);
-      if (compareMode) {
-        toggleCompareMode();
-      }
-    } else {
-      setSecondaryTicker(value);
-      if (!compareMode) {
-        toggleCompareMode();
-      }
-      fetchSecondaryDailyReturns(value, shouldRefreshData(value));
-    }
-  };
-
-  // Function to handle custom ticker input change
-  const handleCustomTickerChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setCustomTicker(e.target.value.toUpperCase());
-  };
-
-  // Function to handle custom ticker input keypress
-  const handleCustomTickerKeyPress = async (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && customTicker.trim()) {
-      try {
-        // Try to fetch data for the ticker first
-        await fetchDailyReturns(customTicker, true);
-
-        // If successful, add the stock to the custom list
-        addCustomStock(customTicker);
-        setTicker(customTicker);
-        setShowCustomInput(false);
-        setCustomTicker('');
-      } catch (error) {
-        // If there's an error, don't add the stock and reset to TSLA
-        setTicker('TSLA');
-        fetchDailyReturns('TSLA', false);
-      }
-    }
-  };
-
-  // Function to handle add custom ticker button click
-  const handleAddCustomTicker = async () => {
-    if (customTicker.trim()) {
-      try {
-        // Try to fetch data for the ticker first
-        await fetchDailyReturns(customTicker, true);
-
-        // If successful, add the stock to the custom list
-        addCustomStock(customTicker);
-        setTicker(customTicker);
-        setShowCustomInput(false);
-        setCustomTicker('');
-      } catch (error) {
-        // If there's an error, don't add the stock and reset to TSLA
-        setTicker('TSLA');
-        fetchDailyReturns('TSLA', false);
-      }
-    }
-  };
-
-  // Function to cancel adding custom ticker
-  const handleCancelCustomTicker = () => {
-    setShowCustomInput(false);
-    setCustomTicker('');
-  };
+  }, [dailyReturnsData, secondaryDailyReturnsData, compareMode, combinedYears, selectedYear]);
 
   // Function to handle year selection change
   const handleYearChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -183,7 +81,7 @@ export default function DailyReturns() {
   // Get all return values to calculate color gradation
   const allReturns: number[] = [];
   if (dailyReturnsData && selectedYear) {
-    Object.entries(dailyReturnsData.data[selectedYear] || {}).forEach(([_, monthData]) => {
+    Object.values(dailyReturnsData.data[selectedYear] || {}).forEach((monthData) => {
       if (monthData) {
         monthData.forEach((day) => {
           if (day && day.return !== undefined) {
@@ -382,82 +280,11 @@ export default function DailyReturns() {
                 </Link>
               </div>
             </div>
-            <div className="flex flex-col md:flex-row space-y-2 md:space-y-0 md:space-x-4 mt-4 md:mt-0">
-              {!showCustomInput ? (
-                <div className="flex flex-col md:flex-row space-y-2 md:space-y-0 md:space-x-4">
-                  <div className="flex items-center">
-                    <label htmlFor="ticker" className="mr-2 text-gray-700">
-                      Ticker:
-                    </label>
-                    <select
-                      id="ticker"
-                      className="border rounded px-2 py-1"
-                      value={currentTicker}
-                      onChange={handleTickerChange}
-                      disabled={isLoading}
-                    >
-                      {availableStocks.map((stock) => (
-                        <option key={stock} value={stock}>
-                          {stock}
-                        </option>
-                      ))}
-                      <option value="add-custom">+ Add Custom...</option>
-                    </select>
-                  </div>
-
-                  <div className="flex items-center">
-                    <label htmlFor="secondary-ticker" className="mr-2 text-gray-700">
-                      Compare with:
-                    </label>
-                    <select
-                      id="secondary-ticker"
-                      className="border rounded px-2 py-1"
-                      value={secondaryTicker || 'none'}
-                      onChange={handleSecondaryTickerChange}
-                      disabled={isLoading}
-                    >
-                      <option value="none">None</option>
-                      {availableStocks
-                        .filter(stock => stock !== currentTicker)
-                        .map((stock) => (
-                          <option key={stock} value={stock}>
-                            {stock}
-                          </option>
-                      ))}
-                      <option value="add-custom">+ Add Custom...</option>
-                    </select>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex items-center space-x-2">
-                  <label htmlFor="custom-ticker" className="mr-2 text-gray-700">
-                    Custom Ticker:
-                  </label>
-                  <input
-                    ref={customInputRef}
-                    type="text"
-                    id="custom-ticker"
-                    className="border rounded px-2 py-1 w-24"
-                    value={customTicker}
-                    onChange={handleCustomTickerChange}
-                    onKeyDown={handleCustomTickerKeyPress}
-                    placeholder="e.g. AAPL"
-                  />
-                  <button
-                    className="bg-green-600 text-white px-2 py-1 rounded hover:bg-green-700 transition text-sm"
-                    onClick={handleAddCustomTicker}
-                  >
-                    Add
-                  </button>
-                  <button
-                    className="bg-gray-400 text-white px-2 py-1 rounded hover:bg-gray-500 transition text-sm"
-                    onClick={handleCancelCustomTicker}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              )}
-            </div>
+            <TickerSelector
+              fetchPrimaryData={fetchDailyReturns}
+              fetchSecondaryData={fetchSecondaryDailyReturns}
+              isLoading={isLoading}
+            />
           </div>
 
           <p className="mb-6 text-gray-700">
@@ -487,12 +314,14 @@ export default function DailyReturns() {
               <button
                 className="bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-1 px-2 rounded-l flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
                 onClick={() => {
-                  const currentIndex = combinedYears.indexOf(selectedYear);
-                  if (currentIndex > 0) {
-                    setSelectedYear(combinedYears[currentIndex - 1]);
+                  if (selectedYear !== null) {
+                    const currentIndex = combinedYears.indexOf(selectedYear);
+                    if (currentIndex > 0) {
+                      setSelectedYear(combinedYears[currentIndex - 1]);
+                    }
                   }
                 }}
-                disabled={!selectedYear || combinedYears.indexOf(selectedYear) <= 0}
+                disabled={!selectedYear || combinedYears.indexOf(selectedYear as number) <= 0}
                 title="Previous Year"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -522,12 +351,14 @@ export default function DailyReturns() {
               <button
                 className="bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-1 px-2 rounded-r flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
                 onClick={() => {
-                  const currentIndex = combinedYears.indexOf(selectedYear);
-                  if (currentIndex < combinedYears.length - 1) {
-                    setSelectedYear(combinedYears[currentIndex + 1]);
+                  if (selectedYear !== null) {
+                    const currentIndex = combinedYears.indexOf(selectedYear);
+                    if (currentIndex < combinedYears.length - 1) {
+                      setSelectedYear(combinedYears[currentIndex + 1]);
+                    }
                   }
                 }}
-                disabled={!selectedYear || combinedYears.indexOf(selectedYear) >= combinedYears.length - 1}
+                disabled={!selectedYear || combinedYears.indexOf(selectedYear as number) >= combinedYears.length - 1}
                 title="Next Year"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
