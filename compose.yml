@@ -1,0 +1,9 @@
+services:
+  backend:
+    build: .
+    ports:
+      - "6969:6969"
+    volumes:
+      - ./data:/app/build/data
+    # env_file:
+      # - .env
