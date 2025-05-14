@@ -1,36 +1,86 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import useStore from '../store';
 
 export default function MonthlyReturns() {
-  const { fetchMonthlyReturns, monthlyReturnsData, isLoading, error } = useStore((state) => ({
+  const {
+    fetchMonthlyReturns,
+    monthlyReturnsData,
+    isLoading,
+    error,
+    currentTicker,
+    setTicker,
+    shouldRefreshData,
+    availableStocks,
+    addCustomStock
+  } = useStore((state) => ({
     fetchMonthlyReturns: state.fetchMonthlyReturns,
     monthlyReturnsData: state.monthlyReturnsData,
     isLoading: state.isLoading,
     error: state.error,
+    currentTicker: state.currentTicker,
+    setTicker: state.setTicker,
+    shouldRefreshData: state.shouldRefreshData,
+    availableStocks: state.availableStocks,
+    addCustomStock: state.addCustomStock
   }));
 
-  const [ticker, setTicker] = useState('TSLA');
+  const [showCustomInput, setShowCustomInput] = useState(false);
+  const [customTicker, setCustomTicker] = useState('');
+  const customInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    fetchMonthlyReturns(ticker, false);
+    // Check if we need to refresh the data (it's older than 1 day)
+    const needsRefresh = shouldRefreshData(currentTicker);
+    fetchMonthlyReturns(currentTicker, needsRefresh);
   }, []);
 
-  // Function to handle refresh button click
-  const handleRefresh = () => {
-    fetchMonthlyReturns(ticker, true);
-  };
+  // Function to handle ticker selection change
+  const handleTickerChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const value = e.target.value;
 
-  // Function to handle ticker input change
-  const handleTickerChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setTicker(e.target.value.toUpperCase());
-  };
-
-  // Function to handle ticker input keypress
-  const handleTickerKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      fetchMonthlyReturns(ticker, false);
+    if (value === 'add-custom') {
+      setShowCustomInput(true);
+      setTimeout(() => {
+        customInputRef.current?.focus();
+      }, 0);
+    } else {
+      setTicker(value);
+      fetchMonthlyReturns(value, shouldRefreshData(value));
     }
+  };
+
+  // Function to handle custom ticker input change
+  const handleCustomTickerChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setCustomTicker(e.target.value.toUpperCase());
+  };
+
+  // Function to handle custom ticker input keypress
+  const handleCustomTickerKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && customTicker.trim()) {
+      addCustomStock(customTicker);
+      setTicker(customTicker);
+      fetchMonthlyReturns(customTicker, true);
+      setShowCustomInput(false);
+      setCustomTicker('');
+    }
+  };
+
+  // Function to handle add custom ticker button click
+  const handleAddCustomTicker = () => {
+    if (customTicker.trim()) {
+      addCustomStock(customTicker);
+      setTicker(customTicker);
+      fetchMonthlyReturns(customTicker, true);
+      setShowCustomInput(false);
+      setCustomTicker('');
+    }
+  };
+
+  // Function to cancel adding custom ticker
+  const handleCancelCustomTicker = () => {
+    setShowCustomInput(false);
+    setCustomTicker('');
   };
 
   // Function to calculate color opacity based on value
@@ -78,32 +128,61 @@ export default function MonthlyReturns() {
               </div>
             </div>
             <div className="flex flex-col md:flex-row space-y-2 md:space-y-0 md:space-x-4 mt-4 md:mt-0">
-              <div className="flex items-center">
-                <label htmlFor="ticker" className="mr-2 text-gray-700">
-                  Ticker:
-                </label>
-                <input
-                  type="text"
-                  id="ticker"
-                  className="border rounded px-2 py-1 w-24"
-                  value={ticker}
-                  onChange={handleTickerChange}
-                  onKeyPress={handleTickerKeyPress}
-                />
-              </div>
-              <button
-                className="bg-blue-600 text-white px-4 py-1 rounded hover:bg-blue-700 transition"
-                onClick={handleRefresh}
-                disabled={isLoading}
-              >
-                {isLoading ? 'Loading...' : 'Refresh Data'}
-              </button>
+              {!showCustomInput ? (
+                <div className="flex items-center">
+                  <label htmlFor="ticker" className="mr-2 text-gray-700">
+                    Ticker:
+                  </label>
+                  <select
+                    id="ticker"
+                    className="border rounded px-2 py-1"
+                    value={currentTicker}
+                    onChange={handleTickerChange}
+                    disabled={isLoading}
+                  >
+                    {availableStocks.map((stock) => (
+                      <option key={stock} value={stock}>
+                        {stock}
+                      </option>
+                    ))}
+                    <option value="add-custom">+ Add Custom...</option>
+                  </select>
+                </div>
+              ) : (
+                <div className="flex items-center space-x-2">
+                  <label htmlFor="custom-ticker" className="mr-2 text-gray-700">
+                    Custom Ticker:
+                  </label>
+                  <input
+                    ref={customInputRef}
+                    type="text"
+                    id="custom-ticker"
+                    className="border rounded px-2 py-1 w-24"
+                    value={customTicker}
+                    onChange={handleCustomTickerChange}
+                    onKeyPress={handleCustomTickerKeyPress}
+                    placeholder="e.g. AAPL"
+                  />
+                  <button
+                    className="bg-green-600 text-white px-2 py-1 rounded hover:bg-green-700 transition text-sm"
+                    onClick={handleAddCustomTicker}
+                  >
+                    Add
+                  </button>
+                  <button
+                    className="bg-gray-400 text-white px-2 py-1 rounded hover:bg-gray-500 transition text-sm"
+                    onClick={handleCancelCustomTicker}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
           <p className="mb-6 text-gray-700">
             The table below presents the monthly returns of{' '}
-            <span id="ticker-name">{monthlyReturnsData?.ticker || ticker}</span>, with color gradation from worst to
+            <span id="ticker-name">{monthlyReturnsData?.ticker || currentTicker}</span>, with color gradation from worst to
             best to easily spot seasonal factors. Returns are adjusted for dividends.
           </p>
 

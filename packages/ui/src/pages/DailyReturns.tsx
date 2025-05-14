@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import useStore from '../store';
 
@@ -8,18 +8,38 @@ interface DailyCalendarData {
 }
 
 export default function DailyReturns() {
-  const { fetchDailyReturns, dailyReturnsData, isLoading, error } = useStore((state) => ({
+  const {
+    fetchDailyReturns,
+    dailyReturnsData,
+    isLoading,
+    error,
+    currentTicker,
+    setTicker,
+    shouldRefreshData,
+    availableStocks,
+    addCustomStock
+  } = useStore((state) => ({
     fetchDailyReturns: state.fetchDailyReturns,
     dailyReturnsData: state.dailyReturnsData,
     isLoading: state.isLoading,
     error: state.error,
+    currentTicker: state.currentTicker,
+    setTicker: state.setTicker,
+    shouldRefreshData: state.shouldRefreshData,
+    availableStocks: state.availableStocks,
+    addCustomStock: state.addCustomStock
   }));
 
-  const [ticker, setTicker] = useState('TSLA');
+  const [showCustomInput, setShowCustomInput] = useState(false);
+  const [customTicker, setCustomTicker] = useState('');
+  const customInputRef = useRef<HTMLInputElement>(null);
+
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
 
   useEffect(() => {
-    fetchDailyReturns(ticker, false);
+    // Check if we need to refresh the data (it's older than 1 day)
+    const needsRefresh = shouldRefreshData(currentTicker);
+    fetchDailyReturns(currentTicker, needsRefresh);
   }, []);
 
   useEffect(() => {
@@ -29,21 +49,52 @@ export default function DailyReturns() {
     }
   }, [dailyReturnsData]);
 
-  // Function to handle refresh button click
-  const handleRefresh = () => {
-    fetchDailyReturns(ticker, true);
-  };
+  // Function to handle ticker selection change
+  const handleTickerChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const value = e.target.value;
 
-  // Function to handle ticker input change
-  const handleTickerChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setTicker(e.target.value.toUpperCase());
-  };
-
-  // Function to handle ticker input keypress
-  const handleTickerKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      fetchDailyReturns(ticker, false);
+    if (value === 'add-custom') {
+      setShowCustomInput(true);
+      setTimeout(() => {
+        customInputRef.current?.focus();
+      }, 0);
+    } else {
+      setTicker(value);
+      fetchDailyReturns(value, shouldRefreshData(value));
     }
+  };
+
+  // Function to handle custom ticker input change
+  const handleCustomTickerChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setCustomTicker(e.target.value.toUpperCase());
+  };
+
+  // Function to handle custom ticker input keypress
+  const handleCustomTickerKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && customTicker.trim()) {
+      addCustomStock(customTicker);
+      setTicker(customTicker);
+      fetchDailyReturns(customTicker, true);
+      setShowCustomInput(false);
+      setCustomTicker('');
+    }
+  };
+
+  // Function to handle add custom ticker button click
+  const handleAddCustomTicker = () => {
+    if (customTicker.trim()) {
+      addCustomStock(customTicker);
+      setTicker(customTicker);
+      fetchDailyReturns(customTicker, true);
+      setShowCustomInput(false);
+      setCustomTicker('');
+    }
+  };
+
+  // Function to cancel adding custom ticker
+  const handleCancelCustomTicker = () => {
+    setShowCustomInput(false);
+    setCustomTicker('');
   };
 
   // Function to handle year selection change
@@ -164,32 +215,61 @@ export default function DailyReturns() {
               </div>
             </div>
             <div className="flex flex-col md:flex-row space-y-2 md:space-y-0 md:space-x-4 mt-4 md:mt-0">
-              <div className="flex items-center">
-                <label htmlFor="ticker" className="mr-2 text-gray-700">
-                  Ticker:
-                </label>
-                <input
-                  type="text"
-                  id="ticker"
-                  className="border rounded px-2 py-1 w-24"
-                  value={ticker}
-                  onChange={handleTickerChange}
-                  onKeyPress={handleTickerKeyPress}
-                />
-              </div>
-              <button
-                className="bg-blue-600 text-white px-4 py-1 rounded hover:bg-blue-700 transition"
-                onClick={handleRefresh}
-                disabled={isLoading}
-              >
-                {isLoading ? 'Loading...' : 'Refresh Data'}
-              </button>
+              {!showCustomInput ? (
+                <div className="flex items-center">
+                  <label htmlFor="ticker" className="mr-2 text-gray-700">
+                    Ticker:
+                  </label>
+                  <select
+                    id="ticker"
+                    className="border rounded px-2 py-1"
+                    value={currentTicker}
+                    onChange={handleTickerChange}
+                    disabled={isLoading}
+                  >
+                    {availableStocks.map((stock) => (
+                      <option key={stock} value={stock}>
+                        {stock}
+                      </option>
+                    ))}
+                    <option value="add-custom">+ Add Custom...</option>
+                  </select>
+                </div>
+              ) : (
+                <div className="flex items-center space-x-2">
+                  <label htmlFor="custom-ticker" className="mr-2 text-gray-700">
+                    Custom Ticker:
+                  </label>
+                  <input
+                    ref={customInputRef}
+                    type="text"
+                    id="custom-ticker"
+                    className="border rounded px-2 py-1 w-24"
+                    value={customTicker}
+                    onChange={handleCustomTickerChange}
+                    onKeyPress={handleCustomTickerKeyPress}
+                    placeholder="e.g. AAPL"
+                  />
+                  <button
+                    className="bg-green-600 text-white px-2 py-1 rounded hover:bg-green-700 transition text-sm"
+                    onClick={handleAddCustomTicker}
+                  >
+                    Add
+                  </button>
+                  <button
+                    className="bg-gray-400 text-white px-2 py-1 rounded hover:bg-gray-500 transition text-sm"
+                    onClick={handleCancelCustomTicker}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
           <p className="mb-6 text-gray-700">
             The calendars below show daily returns of{' '}
-            <span>{dailyReturnsData?.ticker || ticker}</span> with color intensity representing the magnitude of returns.
+            <span>{dailyReturnsData?.ticker || currentTicker}</span> with color intensity representing the magnitude of returns.
             Green indicates positive returns, red indicates negative returns.
           </p>
 
