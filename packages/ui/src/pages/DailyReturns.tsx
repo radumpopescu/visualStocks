@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import useStore from '../store';
-import cl from '../helpers/classNames';
 import TickerSelector from '../components/TickerSelector';
 
 interface DailyCalendarData {

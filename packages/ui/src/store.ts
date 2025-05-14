@@ -24,10 +24,6 @@ interface DailyReturnsData {
   ticker: string;
 }
 
-// Types for secondary stock data
-interface SecondaryMonthlyReturnsData extends MonthlyReturnsData {}
-interface SecondaryDailyReturnsData extends DailyReturnsData {}
-
 // Type for refresh metadata
 interface RefreshMetadata {
   [ticker: string]: {
