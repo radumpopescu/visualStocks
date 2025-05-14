@@ -1,9 +1,17 @@
+networks:
+  caddy:
+    external: true
 services:
   backend:
     build: .
-    ports:
-      - "6969:6969"
+    # ports:
+    #   - "6969:6969"
     volumes:
       - ./data:/app/build/data
+    networks:
+      - caddy 
+    labels:
+      caddy: "stocks.342.ro"
+      caddy.reverse_proxy: "{{upstreams 6969}}"
     # env_file:
       # - .env
