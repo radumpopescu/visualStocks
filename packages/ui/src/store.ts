@@ -24,6 +24,10 @@ interface DailyReturnsData {
   ticker: string;
 }
 
+// Types for secondary stock data
+interface SecondaryMonthlyReturnsData extends MonthlyReturnsData {}
+interface SecondaryDailyReturnsData extends DailyReturnsData {}
+
 // Type for refresh metadata
 interface RefreshMetadata {
   [ticker: string]: {
@@ -47,6 +51,12 @@ type StoreType = {
   currentTicker: string;
   setTicker: (ticker: string) => void;
 
+  // Comparison mode state and actions
+  compareMode: boolean;
+  toggleCompareMode: () => void;
+  secondaryTicker: string | null;
+  setSecondaryTicker: (ticker: string | null) => void;
+
   // Stock list management
   availableStocks: string[];
   customStocks: string[];
@@ -60,10 +70,14 @@ type StoreType = {
   // Monthly returns state and actions
   monthlyReturnsData: MonthlyReturnsData | null;
   fetchMonthlyReturns: (ticker: string, refresh: boolean) => Promise<void>;
+  secondaryMonthlyReturnsData: MonthlyReturnsData | null;
+  fetchSecondaryMonthlyReturns: (ticker: string, refresh: boolean) => Promise<void>;
 
   // Daily returns state and actions
   dailyReturnsData: DailyReturnsData | null;
   fetchDailyReturns: (ticker: string, refresh: boolean) => Promise<void>;
+  secondaryDailyReturnsData: DailyReturnsData | null;
+  fetchSecondaryDailyReturns: (ticker: string, refresh: boolean) => Promise<void>;
 };
 
 const useStore = create<StoreType>()(
@@ -79,6 +93,16 @@ const useStore = create<StoreType>()(
       currentTicker: 'TSLA',
       setTicker: (ticker: string) => {
         set({ currentTicker: ticker.toUpperCase() });
+      },
+
+      // Comparison mode state
+      compareMode: false,
+      toggleCompareMode: () => {
+        set((state) => ({ compareMode: !state.compareMode }));
+      },
+      secondaryTicker: null,
+      setSecondaryTicker: (ticker: string | null) => {
+        set({ secondaryTicker: ticker ? ticker.toUpperCase() : null });
       },
 
       // Stock list management
@@ -125,9 +149,11 @@ const useStore = create<StoreType>()(
 
       // Monthly returns state
       monthlyReturnsData: null,
+      secondaryMonthlyReturnsData: null,
 
       // Daily returns state
       dailyReturnsData: null,
+      secondaryDailyReturnsData: null,
 
       test: async () => {
         try {
@@ -220,11 +246,67 @@ const useStore = create<StoreType>()(
           });
         }
       },
+
+      // Fetch secondary monthly returns data
+      fetchSecondaryMonthlyReturns: async (ticker: string, refresh: boolean) => {
+        try {
+          if (!ticker) return;
+
+          const upperTicker = ticker.toUpperCase();
+
+          // Call the monthly returns endpoint
+          const result = await socketRequestWithId<MonthlyReturnsData>(socket, 'monthly-returns', {
+            ticker: upperTicker,
+            refresh,
+          });
+
+          // Update refresh metadata
+          get().updateRefreshMetadata(upperTicker);
+
+          set({
+            secondaryMonthlyReturnsData: result,
+            secondaryTicker: upperTicker,
+          });
+        } catch (error) {
+          set({
+            error: error instanceof Error ? error.message : 'Unknown error',
+          });
+        }
+      },
+
+      // Fetch secondary daily returns data
+      fetchSecondaryDailyReturns: async (ticker: string, refresh: boolean) => {
+        try {
+          if (!ticker) return;
+
+          const upperTicker = ticker.toUpperCase();
+
+          // Call the daily returns endpoint
+          const result = await socketRequestWithId<DailyReturnsData>(socket, 'daily-returns', {
+            ticker: upperTicker,
+            refresh,
+          });
+
+          // Update refresh metadata
+          get().updateRefreshMetadata(upperTicker);
+
+          set({
+            secondaryDailyReturnsData: result,
+            secondaryTicker: upperTicker,
+          });
+        } catch (error) {
+          set({
+            error: error instanceof Error ? error.message : 'Unknown error',
+          });
+        }
+      },
     }),
     {
       name: 'stock-returns-storage', // name of the item in localStorage
       partialize: (state) => ({
         currentTicker: state.currentTicker,
+        secondaryTicker: state.secondaryTicker,
+        compareMode: state.compareMode,
         refreshMetadata: state.refreshMetadata,
         customStocks: state.customStocks,
       }), // only persist these fields
